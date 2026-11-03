@@ -65,7 +65,10 @@ def claims_from_git() -> list[str]:
 
 
 def changes_from_git() -> list[tuple[str, str]]:
-    out = subprocess.run(["git", "diff", "--name-status", "--no-renames", "HEAD~1", "HEAD"],
+    has_parent = subprocess.run(["git", "rev-parse", "--verify", "-q", "HEAD~1"], cwd=ROOT,
+                                capture_output=True).returncode == 0
+    base = "HEAD~1" if has_parent else "4b825dc642cb6eb9a060e54bf8d69288fbee4904"   # git's empty tree
+    out = subprocess.run(["git", "diff", "--name-status", "--no-renames", base, "HEAD"],
                          cwd=ROOT, capture_output=True, text=True)
     if out.returncode:
         raise SystemExit(f"git diff failed: {out.stderr.strip()}")
