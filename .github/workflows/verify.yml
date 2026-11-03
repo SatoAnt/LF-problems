@@ -42,7 +42,7 @@ jobs:
 
       - name: Install Lean (elan v4.1.2, pinned)
         run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/13e8ade06344711b0a99be2374483872ac70d036/elan-init.sh -o elan-init.sh
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/58e8d545e33641f66dbcbd22c4283109e71757be/elan-init.sh -o elan-init.sh
           sudo mkdir -p /opt/elan && sudo chown "$USER" /opt/elan
           sh elan-init.sh -y --default-toolchain none --no-modify-path
           rm elan-init.sh
