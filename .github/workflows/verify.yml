@@ -1,0 +1,88 @@
+# lemmafund verification. The lemmafund server pushes each piece of work as one commit on a
+# `ci/...` branch; this job decides pass/fail, and the server merges only what passed.
+# Nothing here has secrets: the job's token is read-only and is not left on disk.
+name: verify
+
+on:
+  push:
+    branches: ["ci/**", "main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      ELAN_HOME: /opt/elan
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # The checks themselves come from the commit this branch is based on (main), never
+      # from the commit being checked, so a submission can't change its own rules.
+      - name: Use the trusted checker
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then src=HEAD; else src=HEAD~1; fi
+          git archive "$src" ci | tar -x -C "$RUNNER_TEMP/trusted"
+          echo "CHECKER=$RUNNER_TEMP/trusted/ci/verify.py" >> "$GITHUB_ENV"
+
+      # Which files changed, and a source scan. Pure Python: nothing is built or downloaded
+      # until this passes, so a change to the build setup is refused before it can matter.
+      - name: Guard
+        run: python3 "$CHECKER" --root "$GITHUB_WORKSPACE" --branch "$GITHUB_REF_NAME" --guard-only
+
+      - name: Install Lean (elan v4.1.2, pinned)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/13e8ade06344711b0a99be2374483872ac70d036/elan-init.sh -o elan-init.sh
+          sudo mkdir -p /opt/elan && sudo chown "$USER" /opt/elan
+          sh elan-init.sh -y --default-toolchain none --no-modify-path
+          rm elan-init.sh
+          echo "/opt/elan/bin" >> "$GITHUB_PATH"
+
+      - name: Restore Mathlib build cache
+        id: cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .lake/packages
+          key: lake-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      # Trusted step (network on): fetch the pinned toolchain and Mathlib's prebuilt files.
+      - name: Fetch Mathlib
+        run: |
+          lake exe cache get
+          echo "LEAN_BIN=$(dirname "$(elan which lake)")" >> "$GITHUB_ENV"
+
+      # Saved before any submitted code is built, so nothing submitted can end up in the cache.
+      - name: Save Mathlib build cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .lake/packages
+          key: lake-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      # Submitted code is built by a separate user with no sudo rights, inside a network
+      # namespace with no network. It can write only the project's own build folder.
+      - name: Prepare the build user
+        run: |
+          sudo useradd --create-home --shell /usr/sbin/nologin lfbuild
+          d="$GITHUB_WORKSPACE"; while [ "$d" != "/" ]; do sudo chmod o+x "$d"; d=$(dirname "$d"); done
+          sudo chmod -R o+rX "$GITHUB_WORKSPACE" /opt/elan "$RUNNER_TEMP/trusted"
+          sudo mkdir -p "$GITHUB_WORKSPACE/.lake/build"
+          sudo chown lfbuild "$GITHUB_WORKSPACE/.lake"
+          sudo chown -R lfbuild "$GITHUB_WORKSPACE/.lake/build"
+
+      - name: Verify
+        env:
+          LEMMAFUND_BUILD_USER: lfbuild
+        run: |
+          export PATH="$LEAN_BIN:$PATH"
+          python3 "$CHECKER" --root "$GITHUB_WORKSPACE" --branch "$GITHUB_REF_NAME"
