@@ -1,0 +1,13 @@
+{
+  "slug": "multi-account-test-correct-one-for-gc-people-tha",
+  "module": "MultiAccountTestCorrectOneForGcPeopleTha",
+  "title": "Multi Account Test (Correct one for GC people (thanks btw))",
+  "target_sha256": "e5e7f8cc6c43f76593eb7cb54b6710a2d2ed714c77af72944cc2f6c126fc91b6",
+  "goals_sha256": "0b755ff73aecabb2bb026f5944324dd0162b5163c860c419d9ebfde097c79b60",
+  "goals": [
+    {
+      "id": "root",
+      "title": "Multi Account Test (Correct one for GC people (thanks btw))"
+    }
+  ]
+}
