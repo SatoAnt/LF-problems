@@ -42,7 +42,7 @@ jobs:
 
       - name: Install Lean (elan v4.1.2, pinned)
         run: |
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/58e8d545e33641f66dbcbd22c4283109e71757be/elan-init.sh -o elan-init.sh
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 10 https://raw.githubusercontent.com/leanprover/elan/58e8d545e33641f66dbcbd22c4283109e71757be/elan-init.sh -o elan-init.sh
           sudo mkdir -p /opt/elan && sudo chown "$USER" /opt/elan
           sh elan-init.sh -y --default-toolchain none --no-modify-path
           rm elan-init.sh
@@ -58,7 +58,7 @@ jobs:
       # Trusted step (network on): fetch the pinned toolchain and Mathlib's prebuilt files.
       - name: Fetch Mathlib
         run: |
-          lake exe cache get
+          for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 20; done
           echo "LEAN_BIN=$(dirname "$(elan which lake)")" >> "$GITHUB_ENV"
 
       # Saved before any submitted code is built, so nothing submitted can end up in the cache.
